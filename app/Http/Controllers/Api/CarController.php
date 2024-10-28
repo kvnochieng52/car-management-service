@@ -1,5 +1,5 @@
 <?php
-//comment 2
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -7,11 +7,17 @@ use App\Models\Car;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Events\CarCreated;
+use App\Events\CarUpdated;
+use App\Events\CarDeleted;
+use App\Services\UserService;
 
 class CarController extends Controller
 {
-    public function getAllCars()
+
+    public function getAllCars(Request $request)
     {
+
         try {
             $cars = Car::all();
             return response()->json([
@@ -29,22 +35,28 @@ class CarController extends Controller
 
     public function createCar(Request $request)
     {
+
         $request->validate([
             'name' => 'required|string|max:255',
             'model' => 'required|string|max:255',
             'price' => 'required|numeric',
             'availability_status' => 'required|boolean',
         ]);
-
         try {
+
+
+            $user = $request->get('authenticatedUser');
             $car = Car::create([
                 'name' => $request->name,
                 'model' => $request->model,
                 'price' => $request->price,
                 'availability_status' => $request->availability_status,
-                'created_by' => Auth::id(),
-                'updated_by' => Auth::id(),
+                'created_by' =>  $user['data']['id'],
+                'updated_by' =>  $user['data']['id'],
             ]);
+
+            // Dispatch the CarCreated event
+            event(new CarCreated($car));
 
             return response()->json([
                 'success' => true,
@@ -59,8 +71,9 @@ class CarController extends Controller
         }
     }
 
-    public function getCar($id)
+    public function getCar(Request $request, $id)
     {
+
         try {
             $car = Car::findOrFail($id);
             return response()->json([
@@ -83,6 +96,7 @@ class CarController extends Controller
 
     public function updateCar(Request $request, $id)
     {
+
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'model' => 'sometimes|required|string|max:255',
@@ -91,11 +105,15 @@ class CarController extends Controller
         ]);
 
         try {
+            $user = $request->get('authenticatedUser');
             $car = Car::findOrFail($id);
             $car->update(array_merge(
                 $request->all(),
-                ['updated_by' => Auth::id()]
+                ['updated_by' => $user['data']['id']]
             ));
+
+
+            event(new CarUpdated($car));
 
             return response()->json([
                 'success' => true,
@@ -115,11 +133,14 @@ class CarController extends Controller
         }
     }
 
-    public function deleteCar($id)
+    public function deleteCar(Request $request, $id)
     {
+
         try {
             $car = Car::findOrFail($id);
             $car->delete();
+
+            event(new CarDeleted($id));
 
             return response()->json([
                 'success' => true,
